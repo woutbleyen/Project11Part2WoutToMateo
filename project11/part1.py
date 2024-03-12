@@ -1,49 +1,75 @@
-import Sendamail
 import requests
 import datetime
+import Sendamail
 
-print(" even geduld ")
-def calculate_score(avg_temp, snow_cm):
-    if avg_temp < 0:
-        score = 5
-    elif 0 <= avg_temp < 5:
-        score = 4
-    elif 5 <= avg_temp < 10:
-        score = 3
+ideal_temp = float(input("Geef je ideale temperatuur (in Celsius): "))
+rain_tolerance = input("Geef je regentolerantie (Zeer weinig / Minder dan 2mm / Geen voorkeur): ")
+def calculate_score(avg_temp, rain_mm, ideal_temp, rain_tolerance):
+    # Score op basis van temperatuur
+    if abs(avg_temp - ideal_temp) <= 2:
+        temp_score = 5
+    elif abs(avg_temp - ideal_temp) <= 3:
+        temp_score = 4
+    elif abs(avg_temp - ideal_temp) <= 5:
+        temp_score = 3
+    elif abs(avg_temp - ideal_temp) <= 7:
+        temp_score = 2
     else:
-        score = 1
-    # Voeg +1 toe aan de score als er meer dan 5 cm sneeuw voorspeld wordt
-    if snow_cm > 5:
-        score += 1
-        # Zorg ervoor dat de score niet hoger wordt dan 5
-        if score > 5:
-            score = 5
+        temp_score = 1
 
-    return score
+    # Score op basis van regenval
+    if rain_tolerance == "Zeer weinig" and rain_mm < 1:
+        rain_score = 4
+    elif rain_tolerance == "Minder dan 2mm" and rain_mm < 2:
+        rain_score = 4
+    else:
+        rain_score = 0
+
+    return temp_score + rain_score
+
+def get_weather_for_destination(destinations, ideal_temp, rain_tolerance):
+    destination_scores = {}
+
+    for destination, coordinates in destinations.items():
+        lat, lon = coordinates
+        weather_data = get_weather_data(lat, lon)
+        if weather_data:
+            timeslots = weather_data.get("list")
+            avg_temp, rain_mm = get_weather_for_week(timeslots)
+            score = calculate_score(avg_temp, rain_mm, ideal_temp, rain_tolerance)
+            destination_scores[destination] = (avg_temp, rain_mm, score)
+
+    return destination_scores
 
 def get_weather_for_week(timeslots):
     temperatures_first_week = []
-    snow_amount_first_week = 0
+    rain_amount_first_week = [0] * 7
 
-    # Groepeer timeslots per week en sla de weersgegevens van de eerste week op
     for timeslot in timeslots:
         timestamp = timeslot.get("dt")
-        date = datetime.datetime.fromtimestamp(timestamp).date()
-        if date.isocalendar()[1] == datetime.datetime.now().isocalendar()[1]:
+        date = datetime.datetime.fromtimestamp(timestamp)
+        if date.date() <= datetime.datetime.now().date() + datetime.timedelta(days=7):
             temperatures_first_week.append(timeslot.get("main").get("temp"))
-            if "snow" in timeslot:
-                snow_amount_first_week += timeslot["snow"]["3h"] if "3h" in timeslot["snow"] else 0
+            if "rain" in timeslot and "3h" in timeslot["rain"]:
+                day_index = (date.date() - datetime.datetime.now().date()).days
+                rain_amount_first_week[day_index] += timeslot["rain"]["3h"]
 
-    # Omzetten van mm naar cm en afronden tot 2 decimalen
-    snow_cm = round(snow_amount_first_week / 10, 2)
-    # De gemiddelde temperatuur per week
     avg_temp = sum(temperatures_first_week) / len(temperatures_first_week)
+    avg_rain_per_day = sum(rain_amount_first_week) / 7
 
-    return snow_cm, avg_temp
+    return avg_temp, avg_rain_per_day
+
+def rain_week_no_numb(avg_rain_per_day):
+    if avg_rain_per_day < 1:
+        rainpday = "zeer weinig"
+    elif avg_rain_per_day < 2:
+        rainpday = "gemiddeld"
+    else:
+        rainpday = "veel"
+    return rainpday
 
 def get_weather_data(lat, lon):
-    response = requests.get(f"https://api.openweathermap.org/data/2.5/forecast?"
-                            f"lat={lat}&lon={lon}&appid=bbc71d0c3567c74e05b50bdff72f635b&units=metric")
+    response = requests.get(f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid=bbc71d0c3567c74e05b50bdff72f635b&units=metric")
     if response.status_code == 200:
         return response.json()
     else:
@@ -51,7 +77,7 @@ def get_weather_data(lat, lon):
 
 def email(content):
     mail = f"""
-    Voor elk gebied vindt u in deze mail de gemiddelde temperatuur en de hoeveelheid sneeuw die er gaat vallen 
+    Voor elk gebied vindt u in deze mail de gemiddelde temperatuur en de hoeveelheid regen die er gaat vallen 
     van de komende week.
     Er staat ook een score op /5: dit houdt in hoe hoger de score, 
     hoe beter het is om daar op vakantie te gaan.
@@ -62,41 +88,43 @@ def email(content):
 
     Sendamail.main(address, mail)
     print("Mail sent")
-
 def get_weather():
     inhoud_mail = ""
-    locations = {
-        "Les Trois Vallées": (45.3356, 6.5890),
-        "Sölden": (46.9701, 11.0078),
-        "Chamonix Mont Blanc": (45.9237, 6.8694),
-        "Val di Fassa": (46.4265, 11.7684),
-        "Salzburger Sportwelt": (47.3642, 13.4639),
-        "Alpenarena Films-Laax-Falera": (46.8315, 9.2663),
-        "Kitzsteinhorn Kaprun": (47.1824, 12.6912),
-        "Ski Altberg": (47.43346, 8.42053),
-        "Espace Killy": (45.4481, 6.9806),
-        "Špindlerův Mlýn": (50.7296, 15.6075)
+    destinations = {
+        "Ankara, Turkije": (39.9334, 32.8597),
+        "Athene, Griekenland": (37.9838, 23.7275),
+        "La Valette, Malta": (35.8989, 14.5146),
+        "Sardinië, Italië": (40.1209, 9.0129),
+        "Sicilië, Italië": (37.5994, 14.0154),
+        "Nicosia, Cyprus": (35.1856, 33.3823),
+        "Mallorca, Spanje": (39.6953, 3.0176),
+        "Lagos, Portugal": (37.1028, 8.6730),
+        "Mauritius": (20.3484, 57.5522),
+        "Boekarest, Roemenië": (44.4268, 26.1025)
     }
 
-    for location, coordinates in locations.items():
+    for location, coordinates in destinations.items():
         lat, lon = coordinates
         weather_data = get_weather_data(lat, lon)
         if weather_data:
             timeslots = weather_data.get("list")
             inhoud_mail += f"Weerbericht voor {location}:\n"
-            avg_temp, snow_cm = get_weather_for_week(timeslots)
-            score = calculate_score(avg_temp, snow_cm)
+            avg_temp, rain_mm = get_weather_for_week(timeslots)
+            score = calculate_score(avg_temp, rain_mm, ideal_temp, rain_tolerance)
+            rainpday = rain_week_no_numb(rain_mm)
             inhoud_mail += f"Gemiddelde weer voor de eerste week:\n" \
                            f"Gemiddelde temperatuur: {round(avg_temp)}°C\n" \
-                           f"Totale hoeveelheid sneeuw: {round(snow_cm)} cm\n" \
-                           f"Score: {score}/5\n\n"
+                           f"Er word {rainpday} regenval per dag verwacht\n" \
+                           f"\n"
+
+#sorted_destinations = sorted(destination_scores.items(), key=get_score, reverse=True)
+
         else:
             inhoud_mail += f"Kon geen weerbericht ophalen voor {location}."
 
-        # Verzend e-mail met weerinformatie
     address = input("E-mailadres: ")
     Sendamail.main(address, inhoud_mail)
-
+    print("email send ")
 
 if __name__ == "__main__":
     get_weather()
