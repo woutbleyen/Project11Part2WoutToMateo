@@ -1,7 +1,7 @@
 import requests
 import datetime
 import Sendamail
-
+# gebruiker geef zijn persoonlijke preferences hier in .
 ideal_temp = float(input("Geef je ideale temperatuur (in Celsius): "))
 rain_tolerance = input("Geef je regentolerantie (Zeer weinig / Minder dan 2mm / Geen voorkeur): ")
 def calculate_score(avg_temp, rain_mm, ideal_temp, rain_tolerance):
@@ -26,7 +26,7 @@ def calculate_score(avg_temp, rain_mm, ideal_temp, rain_tolerance):
         rain_score = 0
 
     return temp_score + rain_score
-
+# hier word voor iedere destinatie het week in dict en lijst gezet
 def get_weather_for_destination(destinations, ideal_temp, rain_tolerance):
     destination_scores = {}
 
@@ -58,7 +58,7 @@ def get_weather_for_week(timeslots):
     avg_rain_per_day = sum(rain_amount_first_week) / 7
 
     return avg_temp, avg_rain_per_day
-
+# deze if elif else gaat kijken voor later in de mail te printen dat er zeer weinig , gemiddeld ,veel  .
 def rain_week_no_numb(avg_rain_per_day):
     if avg_rain_per_day < 1:
         rainpday = "zeer weinig"
@@ -117,7 +117,7 @@ def get_weather():
                            f"Er word {rainpday} regenval per dag verwacht\n" \
                            f"\n"
 
-#sorted_destinations = sorted(destination_scores.items(), key=get_score, reverse=True)
+
 
         else:
             inhoud_mail += f"Kon geen weerbericht ophalen voor {location}."
